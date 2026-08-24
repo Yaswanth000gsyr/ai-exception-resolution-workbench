@@ -121,7 +121,7 @@ router.post("/:id/resolve", (req, res) => {
   });
 });
 
-//ai explanation
+// AI explanation
 router.post("/:id/ai-explain", async (req, res) => {
   try {
     const exception = exceptions.find(
@@ -134,11 +134,13 @@ router.post("/:id/ai-explain", async (req, res) => {
       });
     }
 
-    const explanation = await generateAIExplanation(exception);
+    const aiResult = await generateAIExplanation(exception);
 
     res.json({
       exceptionId: exception.id,
-      explanation
+      explanation: aiResult.explanation,
+      resolution: aiResult.resolution,
+      confidence: aiResult.confidence
     });
 
   } catch (error) {
@@ -150,4 +152,96 @@ router.post("/:id/ai-explain", async (req, res) => {
   }
 });
 
+// Process exception using AI
+router.post("/:id/process", async (req, res) => {
+  try {
+    const exception = exceptions.find(
+      item => item.id === req.params.id
+    );
+
+    if (!exception) {
+      return res.status(404).json({
+        message: "Exception not found"
+      });
+    }
+
+    // Ask Gemini to analyze the exception
+    const aiResult = await generateAIExplanation(exception);
+
+    // Store AI results on the exception
+    exception.aiExplanation = aiResult.explanation;
+    exception.aiResolution = aiResult.resolution;
+    exception.confidence = Number(aiResult.confidence) || 0;
+
+    // Business decision
+    if (exception.confidence >= 90) {
+      exception.status = "Resolved";
+      exception.decision = "Auto-Resolved";
+      exception.requiresHumanReview = false;
+    } else {
+      exception.status = "Pending Review";
+      exception.decision = "Human Review Required";
+      exception.requiresHumanReview = true;
+    }
+
+    res.json({
+      exceptionId: exception.id,
+      status: exception.status,
+      decision: exception.decision,
+      requiresHumanReview: exception.requiresHumanReview,
+      confidence: exception.confidence,
+      explanation: exception.aiExplanation,
+      resolution: exception.aiResolution
+    });
+
+  } catch (error) {
+    console.error("AI Processing Error:", error);
+
+    res.status(500).json({
+      message: "Failed to process exception",
+      error: error.message
+    });
+  }
+});
+
+
+// Human review decision
+router.post("/:id/review", (req, res) => {
+  const exception = exceptions.find(
+    item => item.id === req.params.id
+  );
+
+  if (!exception) {
+    return res.status(404).json({
+      message: "Exception not found"
+    });
+  }
+
+  const { decision, reviewer } = req.body;
+
+  if (!["approve", "reject"].includes(decision)) {
+    return res.status(400).json({
+      message: "Decision must be 'approve' or 'reject'."
+    });
+  }
+
+  exception.review = {
+    reviewer: reviewer || "Finance Reviewer",
+    decision,
+    reviewedAt: new Date().toISOString()
+  };
+
+  if (decision === "approve") {
+    exception.status = "Resolved";
+    exception.decision = "Human Approved";
+  } else {
+    exception.status = "Rejected";
+    exception.decision = "Human Rejected";
+  }
+
+  res.json({
+    message: "Human review recorded successfully.",
+    exception
+  });
+});
 module.exports = router;

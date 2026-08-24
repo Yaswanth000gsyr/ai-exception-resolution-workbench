@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 
 const exceptionRoutes = require("./routes/exceptionRoutes");
+const invoiceRoutes = require("./routes/invoiceRoutes");
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/exceptions", exceptionRoutes);
+app.use("/api/invoices", invoiceRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
